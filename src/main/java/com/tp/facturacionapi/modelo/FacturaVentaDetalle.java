@@ -1,36 +1,66 @@
 package com.tp.facturacionapi.modelo;
 
 import jakarta.persistence.*;
-import lombok.*;
-import lombok.experimental.SuperBuilder;
 
 @Entity
-@Table(name = "factura_venta_detalles")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@SuperBuilder
-@EqualsAndHashCode(callSuper = true)
-@ToString(callSuper = true)
-public class FacturaVentaDetalle extends AuditoriaApp {
+@Table(name = "factura_venta_detalle")
+public class FacturaVentaDetalle {
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "factura_venta_id", nullable = false)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "articulo_id")
+    private Articulo articulo;
+
+    private Double cantidad;
+    private Double precioUnitario;
+
+    @ManyToOne
+    @JoinColumn(name = "factura_venta_id")
     private FacturaVenta facturaVenta;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "lista_precio_articulo_id", nullable = false)
-    private ListaPrecioArticulo listaPrecioArticulo;
+    public FacturaVentaDetalle() {
+    }
 
-    @Column(nullable = false)
-    private int cantidad;
+    public Long getId() {
+        return id;
+    }
 
-    @Column(nullable = false)
-    private double precioUnitario;
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-    @Column(nullable = false)
-    private double importeSubtotal;
+    public Articulo getArticulo() {
+        return articulo;
+    }
 
-    private String descripcion;
+    public void setArticulo(Articulo articulo) {
+        this.articulo = articulo;
+    }
+
+    public Double getCantidad() {
+        return cantidad;
+    }
+
+    public void setCantidad(Double cantidad) {
+        this.cantidad = cantidad;
+    }
+
+    public Double getPrecioUnitario() {
+        return precioUnitario;
+    }
+
+    public void setPrecioUnitario(Double precioUnitario) {
+        this.precioUnitario = precioUnitario;
+    }
+
+    public FacturaVenta getFacturaVenta() {
+        return facturaVenta;
+    }
+
+    public void setFacturaVenta(FacturaVenta facturaVenta) {
+        this.facturaVenta = facturaVenta;
+    }
 }

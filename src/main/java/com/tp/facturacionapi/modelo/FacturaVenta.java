@@ -25,7 +25,7 @@ public class FacturaVenta extends AuditoriaApp {
     private LocalDateTime fechaEmision;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "punto_venta_id", nullable = false)
+    @JoinColumn(name = "punto_venta_id", nullable = true)
     private PuntoVenta puntoVenta;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -33,11 +33,11 @@ public class FacturaVenta extends AuditoriaApp {
     private Cliente cliente;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "condicion_iva_id", nullable = false)
+    @JoinColumn(name = "condicion_iva_id", nullable = true)
     private CondicionIva condicionIva;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tipo_moneda_id", nullable = false)
+    @JoinColumn(name = "tipo_moneda_id", nullable = true)
     private TipoMoneda tipoMoneda;
 
     private double importeCobrado;

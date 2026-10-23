@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Módulo de Facturación</title>
+    <style>
+:root {
+    --bg: #f5f6fa; --card: #fff; --text: #1d2433; --muted: #6b7385; --line: #e3e6ee;
+    --accent: #3b5bdb; --accent-h: #2f49b3; --ok: #1f8a4c; --ok-bg: #e3f6ea;
+    --bad: #c92a2a; --bad-bg: #fdeaea; --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #12151c; --card: #1a1f2b; --text: #e6e9f2; --muted: #98a1b6; --line: #2a3142;
+        --accent: #6c8cff; --accent-h: #8aa3ff; --ok: #5bd48a; --ok-bg: #173325;
+        --bad: #ff8787; --bad-bg: #3a1c1c;
+    }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: var(--card); border-bottom: 1px solid var(--line); }
+h1 { font-size: 1.2rem; margin: 0; }
+h2 { font-size: 1rem; margin: 0 0 14px; }
+main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 64px; display: grid; gap: 20px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.stat span { display: block; color: var(--muted); font-size: .8rem; }
+.stat strong { font-size: 1.4rem; }
+
+label { display: grid; gap: 4px; font-size: .8rem; color: var(--muted); }
+input, select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+input:focus-visible, select:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; }
+.actions { display: flex; gap: 8px; }
+.cliente { max-width: 420px; margin-bottom: 16px; }
+
+.btn { font: inherit; cursor: pointer; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-h); }
+.btn.danger { color: var(--bad); }
+.btn.sm { padding: 4px 10px; font-size: .85rem; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+td input { min-width: 90px; }
+.muted, .vacio { color: var(--muted); text-align: center; }
+.muted { margin: 12px 0; }
+
+.pill { padding: 2px 10px; border-radius: 99px; font-size: .75rem; font-weight: 600; background: var(--line); color: var(--muted); }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+
+.form-footer { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin: 12px 0 18px; }
+.totales { margin: 0; min-width: 220px; }
+.totales div { display: flex; justify-content: space-between; gap: 24px; padding: 2px 0; color: var(--muted); }
+.totales dt, .totales dd { margin: 0; }
+.totales .total { color: var(--text); font-weight: 700; font-size: 1.1rem; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; }
+
+#toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 10; }
+.toast { padding: 10px 16px; border-radius: 8px; background: var(--text); color: var(--bg); box-shadow: 0 4px 14px rgba(0,0,0,.25); max-width: 340px; }
+.toast.error { background: var(--bad); color: #fff; }
+.toast.exito { background: var(--ok); color: #fff; }
+
+[hidden] { display: none !important; }
+.tabs { display: flex; gap: 6px; }
+.tab { font: inherit; cursor: pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fila-cliente { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.fila-cliente label { flex: 1; min-width: 220px; max-width: 420px; }
+.panel-cliente { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.panel-cliente .grid { margin-bottom: 12px; }
+.paginacion { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.paginacion:empty { display: none; }
+.paginacion .info { color: var(--muted); font-size: .85rem; }
+.paginacion .pags { display: flex; gap: 4px; align-items: center; }
+.btn.pag { min-width: 36px; padding: 5px 10px; }
+.btn.pag[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<header class="topbar">
+    <h1>Módulo de Facturación</h1>
+    <nav class="tabs" aria-label="Secciones">
+        <button type="button" class="tab" data-vista="nueva" aria-selected="true">Nueva factura</button>
+        <button type="button" class="tab" data-vista="lista" aria-selected="false">Comprobantes</button>
+    </nav>
+    <span id="estadoApi" class="pill" title="Conexión con la API">Conectando…</span>
+</header>
+
+<main>
+    <!-- ========== NUEVA FACTURA ========== -->
+    <div id="vistaNueva" class="vista">
+        <form id="formFactura" class="card">
+            <h2>Nueva factura</h2>
+
+            <div class="fila-cliente">
+                <label>Cliente
+                    <select id="clienteId" required><option value="">Cargando clientes…</option></select>
+                </label>
+                <button type="button" id="btnNuevoCliente" class="btn">+ Nuevo cliente</button>
+            </div>
+
+            <div id="panelCliente" class="panel-cliente" hidden>
+                <div class="grid">
+                    <label>Denominación * <input type="text" id="nDenominacion" placeholder="Razón social o nombre"></label>
+                    <label>CUIT <input type="text" id="nCuit" placeholder="20-12345678-9"></label>
+                    <label>Domicilio <input type="text" id="nDomicilio"></label>
+                </div>
+                <div class="actions">
+                    <button type="button" id="btnGuardarCliente" class="btn primary">Guardar cliente</button>
+                    <button type="button" id="btnCancelarCliente" class="btn">Cancelar</button>
+                </div>
+            </div>
+
+            <h2 style="margin-top:24px">Ítems</h2>
+            <div class="table-wrap">
+                <table id="tablaDetalles">
+                    <thead>
+                    <tr>
+                        <th>Artículo ID</th><th>Cantidad</th><th>Precio unitario</th>
+                        <th class="num">Subtotal</th><th></th>
+                    </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <p id="sinItems" class="muted">Todavía no agregaste ítems.</p>
+
+            <div class="form-footer">
+                <button type="button" id="btnAgregarItem" class="btn">+ Agregar ítem</button>
+                <dl class="totales">
+                    <div><dt>Neto</dt><dd id="totNeto">$ 0,00</dd></div>
+                    <div><dt>IVA 21%</dt><dd id="totIva">$ 0,00</dd></div>
+                    <div class="total"><dt>Total</dt><dd id="totTotal">$ 0,00</dd></div>
+                </dl>
+            </div>
+            <button type="submit" class="btn primary" id="btnGuardar">Guardar factura</button>
+        </form>
+    </div>
+
+    <!-- ========== COMPROBANTES ========== -->
+    <div id="vistaLista" class="vista" hidden>
+        <section class="stats" aria-label="Resumen">
+            <div class="stat"><span>Comprobantes</span><strong id="statCantidad">0</strong></div>
+            <div class="stat"><span>Total facturado</span><strong id="statTotal">$ 0,00</strong></div>
+            <div class="stat"><span>Anuladas</span><strong id="statAnuladas">0</strong></div>
+        </section>
+
+        <section class="card" style="margin-top:20px">
+            <h2>Buscar comprobantes</h2>
+            <form id="formFiltros" class="grid">
+                <label>N.º de comprobante <input type="number" id="fId" min="1" placeholder="Ej: 12"></label>
+                <label>Cliente <input type="text" id="fCliente" placeholder="Nombre del cliente"></label>
+                <label>Estado
+                    <select id="fEstado">
+                        <option value="">Todos</option>
+                        <option value="EMITIDA">Emitida</option>
+                        <option value="ANULADA">Anulada</option>
+                    </select>
+                </label>
+                <label>Desde <input type="date" id="fDesde"></label>
+                <label>Hasta <input type="date" id="fHasta"></label>
+                <label>Monto mínimo <input type="number" id="fMonto" min="0" step="0.01" placeholder="0,00"></label>
+                <div class="actions">
+                    <button type="submit" class="btn primary">Buscar</button>
+                    <button type="button" id="btnLimpiar" class="btn">Limpiar</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card" style="margin-top:20px">
+            <h2>Comprobantes</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>N.º</th><th>Fecha</th><th>Cliente</th><th>Estado</th>
+                        <th class="num">Importe</th><th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="tablaFacturasBody"></tbody>
+                </table>
+            </div>
+            <div id="paginacion" class="paginacion"></div>
+        </section>
+    </div>
+</main>
+
+<div id="toasts" aria-live="polite"></div>
+<script type="module" src="dist/app.js"></script>
+</body>
+</html>
