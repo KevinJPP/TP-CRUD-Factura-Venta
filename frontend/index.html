@@ -83,6 +83,70 @@ td input { min-width: 90px; }
 .paginacion .pags { display: flex; gap: 4px; align-items: center; }
 .btn.pag { min-width: 36px; padding: 5px 10px; }
 .btn.pag[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.btn.sm.ghost { border-style: dashed; }
+.nombre-art { color: var(--text); max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.nombre-art.sin { color: var(--muted); }
+.acciones-items { display: flex; gap: 8px; flex-wrap: wrap; }
+
+dialog.modal { padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--text); width: min(640px, calc(100vw - 24px)); max-height: min(720px, calc(100vh - 24px)); box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+dialog.modal[open] { display: flex; flex-direction: column; }
+dialog.modal::backdrop { background: rgba(0,0,0,.55); }
+.modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px 12px; }
+.modal-head h2 { margin: 0; }
+.modal-busqueda { padding: 0 20px 12px; }
+.modal-lista { list-style: none; margin: 0; padding: 0; overflow-y: auto; border-top: 1px solid var(--line); flex: 1; min-height: 360px; }
+.art { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); }
+.art-info { flex: 1; min-width: 0; }
+.art-nombre { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.art-cod { color: var(--muted); font-size: .8rem; }
+.art-precio { font-variant-numeric: tabular-nums; min-width: 120px; text-align: right; }
+.art-total { font-size: .78rem; color: var(--muted); }
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper input { width: 52px; text-align: center; padding: 4px 6px; }
+.stepper .btn { padding: 2px 9px; }
+.en-carrito { font-size: .75rem; color: var(--ok); }
+.modal-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 20px; border-top: 1px solid var(--line); }
+.modal-foot .resumen { color: var(--muted); }
+.modal-foot .resumen strong { color: var(--text); }
+@media (max-width: 520px) { .art { flex-wrap: wrap; } .art-precio { text-align: left; } }
+/* ---------- Comprobante (modal) ---------- */
+.acciones-fila { display: flex; gap: 6px; justify-content: flex-end; }
+body.modal-abierto { overflow: hidden; }
+.modal-cp { position: fixed; inset: 0; z-index: 20; background: rgba(10, 14, 22, .55); display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; overflow-y: auto; }
+.modal-caja { width: min(820px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0,0,0,.3); }
+.modal-barra { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.modal-barra h2 { margin: 0; }
+.comprobante { position: relative; padding: 28px; overflow: hidden; }
+.cp-cabecera { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start; padding-bottom: 18px; border-bottom: 2px solid var(--text); }
+.cp-emisor, .cp-datos { display: grid; gap: 2px; font-size: .9rem; }
+.cp-datos { text-align: right; justify-items: end; }
+.cp-razon { font-size: 1.15rem; }
+.cp-datos strong { font-size: 1.15rem; letter-spacing: .06em; }
+.cp-letra { width: 56px; height: 56px; border: 2px solid var(--text); border-radius: 6px; display: grid; place-items: center; font-size: 2rem; font-weight: 800; }
+.cp-cliente { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 20px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.cp-cliente span { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.cp-items { margin-top: 16px; }
+.cp-items td.desc { white-space: normal; }
+.cp-totales { margin: 16px 0 0 auto; max-width: 280px; }
+.cp-pie { margin-top: 24px; padding-top: 12px; border-top: 1px dashed var(--line); font-size: .8rem; color: var(--muted); text-align: center; }
+.sello-anulada { position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%) rotate(-24deg); font-size: 5rem; font-weight: 900; letter-spacing: .1em; color: var(--bad); opacity: .16; border: 8px solid currentColor; padding: 0 24px; pointer-events: none; }
+
+/* ---------- Impresión / PDF: sólo se imprime el comprobante ---------- */
+@media print {
+    @page { size: A4; margin: 14mm; }
+    :root { --bg: #fff; --card: #fff; --text: #000; --muted: #444; --line: #bbb; --ok: #000; --ok-bg: #fff; --bad: #b00; --bad-bg: #fff; }
+    body { background: #fff; color: #000; font-size: 12px; }
+    body.modal-abierto > *:not(#modalComprobante) { display: none !important; }
+    .modal-cp { position: static; background: none; padding: 0; overflow: visible; display: block; }
+    .modal-caja { width: 100%; border: 0; box-shadow: none; }
+    .no-print { display: none !important; }
+    .comprobante { padding: 0; }
+    .pill { border: 1px solid currentColor; }
+    th, td { padding: 6px; }
+    tr { break-inside: avoid; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
 </style>
 </head>
 <body>
@@ -125,7 +189,7 @@ td input { min-width: 90px; }
                 <table id="tablaDetalles">
                     <thead>
                     <tr>
-                        <th>Artículo ID</th><th>Cantidad</th><th>Precio unitario</th>
+                        <th>Artículo</th><th>Artículo ID</th><th>Cantidad</th><th>Precio unitario</th>
                         <th class="num">Subtotal</th><th></th>
                     </tr>
                     </thead>
@@ -135,7 +199,10 @@ td input { min-width: 90px; }
             <p id="sinItems" class="muted">Todavía no agregaste ítems.</p>
 
             <div class="form-footer">
-                <button type="button" id="btnAgregarItem" class="btn">+ Agregar ítem</button>
+                <div class="acciones-items">
+                    <button type="button" id="btnCatalogo" class="btn primary">🛒 Elegir artículos</button>
+                    <button type="button" id="btnAgregarItem" class="btn">+ Agregar ítem manual</button>
+                </div>
                 <dl class="totales">
                     <div><dt>Neto</dt><dd id="totNeto">$ 0,00</dd></div>
                     <div><dt>IVA 21%</dt><dd id="totIva">$ 0,00</dd></div>
@@ -194,7 +261,37 @@ td input { min-width: 90px; }
     </div>
 </main>
 
+<!-- ========== CATÁLOGO DE ARTÍCULOS (ventana emergente) ========== -->
+<dialog id="dlgCatalogo" class="modal" aria-labelledby="tituloCatalogo">
+    <div class="modal-head">
+        <h2 id="tituloCatalogo">Artículos</h2>
+        <button type="button" class="btn sm" id="btnCerrarCatalogo" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="modal-busqueda">
+        <input type="search" id="buscarArticulo" placeholder="Buscar: fideos, arroz, agua…" autocomplete="off">
+    </div>
+    <ul id="listaArticulos" class="modal-lista"></ul>
+    <div class="modal-foot">
+        <span class="resumen" id="resumenCarrito">Carrito vacío</span>
+        <button type="button" class="btn primary" id="btnListoCatalogo">Listo</button>
+    </div>
+</dialog>
+
 <div id="toasts" aria-live="polite"></div>
-<script type="module" src="dist/app.js"></script>
+<!-- ========== MODAL COMPROBANTE ========== -->
+<div id="modalComprobante" class="modal-cp" role="dialog" aria-modal="true" aria-labelledby="tituloComprobante" hidden>
+    <div class="modal-caja">
+        <div class="modal-barra no-print">
+            <h2 id="tituloComprobante">Comprobante</h2>
+            <div class="actions">
+                <button type="button" id="btnImprimir" class="btn primary">Imprimir / Guardar PDF</button>
+                <button type="button" id="btnCerrarComprobante" class="btn" aria-label="Cerrar">Cerrar</button>
+            </div>
+        </div>
+        <article id="comprobanteContenido" class="comprobante"></article>
+    </div>
+</div>
+
+<script type="module" src="dist/app.js?v=3"></script>
 </body>
 </html>

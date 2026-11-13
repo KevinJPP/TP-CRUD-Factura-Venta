@@ -1,87 +1,58 @@
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 export class FacturaService {
     constructor() {
-        this.apiUrl = 'http://localhost:8080/api/facturas';
+        this.baseUrl = 'http://localhost:8080/api';
     }
-    obtenerFacturas() {
-        return __awaiter(this, void 0, void 0, function* () {
+    async request(path, init) {
+        let res;
+        try {
+            res = await fetch(`${this.baseUrl}${path}`, init);
+        }
+        catch {
+            throw new Error('No se pudo conectar con el servidor (¿está corriendo en el puerto 8080?).');
+        }
+        if (!res.ok) {
+            let detalle = '';
             try {
-                const response = yield fetch(this.apiUrl);
-                if (!response.ok) {
-                    throw new Error(`Error al obtener las facturas: ${response.statusText}`);
-                }
-                return yield response.json();
+                detalle = (await res.json()).message ?? '';
             }
-            catch (error) {
-                console.error('Error en obtenerFacturas:', error);
-                throw error;
-            }
+            catch { /* sin cuerpo JSON */ }
+            throw new Error(detalle || `El servidor respondió ${res.status} ${res.statusText}`.trim());
+        }
+        return res.status === 204 ? undefined : res.json();
+    }
+    json(method, body) {
+        return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+    }
+    // Devuelve una página (backend nuevo) o el listado completo (backend viejo)
+    obtenerFacturas(filtros = {}) {
+        const params = new URLSearchParams();
+        Object.entries(filtros).forEach(([k, v]) => {
+            if (v !== undefined && v !== null && v !== '')
+                params.append(k, String(v));
         });
+        const qs = params.toString();
+        return this.request(`/facturas${qs ? `?${qs}` : ''}`);
+    }
+    obtenerArticulos() {
+        return this.request('/articulos');
+    }
+    obtenerClientes() {
+        return this.request('/clientes');
+    }
+    crearCliente(cliente) {
+        return this.request('/clientes', this.json('POST', cliente));
     }
     crearFactura(factura) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const response = yield fetch(this.apiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(factura),
-                });
-                if (!response.status.toString().startsWith('2')) {
-                    throw new Error('Error al crear la factura');
-                }
-                return yield response.json();
-            }
-            catch (error) {
-                console.error('Error en crearFactura:', error);
-                throw error;
-            }
-        });
+        return this.request('/facturas', this.json('POST', factura));
     }
     actualizarFactura(id, factura) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const response = yield fetch(`${this.apiUrl}/${id}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(factura),
-                });
-                if (!response.ok) {
-                    throw new Error(`Error al actualizar la factura con ID ${id}`);
-                }
-                return yield response.json();
-            }
-            catch (error) {
-                console.error('Error en actualizarFactura:', error);
-                throw error;
-            }
-        });
+        return this.request(`/facturas/${id}`, this.json('PUT', factura));
     }
+    actualizarEstado(id, estado) {
+        return this.actualizarFactura(id, { estado });
+    }
+    // El backend hace una anulación lógica (estado = "ANULADA")
     eliminarFactura(id) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const response = yield fetch(`${this.apiUrl}/${id}`, {
-                    method: 'DELETE',
-                });
-                if (!response.ok) {
-                    throw new Error(`Error al eliminar la factura con ID ${id}`);
-                }
-            }
-            catch (error) {
-                console.error('Error en eliminarFactura:', error);
-                throw error;
-            }
-        });
+        return this.request(`/facturas/${id}`, { method: 'DELETE' });
     }
 }

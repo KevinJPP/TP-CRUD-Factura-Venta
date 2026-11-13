@@ -1,132 +1,470 @@
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 import { FacturaService } from './services/factura.service.js';
-const facturaService = new FacturaService();
-document.addEventListener('DOMContentLoaded', () => {
-    cargarFacturas().catch(err => console.error(err));
-    const btnActualizar = document.getElementById('btnActualizar');
-    if (btnActualizar) {
-        btnActualizar.addEventListener('click', () => {
-            cargarFacturas().catch(err => console.error(err));
-        });
-    }
-    const btnAgregarItem = document.getElementById('btnAgregarItem');
-    if (btnAgregarItem) {
-        btnAgregarItem.addEventListener('click', agregarFilaDetalle);
-    }
-    const formFactura = document.getElementById('formFactura');
-    if (formFactura) {
-        formFactura.addEventListener('submit', (e) => {
-            guardarFactura(e).catch(err => console.error(err));
-        });
-    }
-});
-function cargarFacturas() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const facturas = yield facturaService.obtenerFacturas();
-            const tbody = document.getElementById('tablaFacturasBody');
-            if (!tbody)
-                return;
-            tbody.innerHTML = '';
-            facturas.forEach(f => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                <td>${f.id}</td>
-                <td>${f.fechaEmision || 'N/D'}</td>
-                <td>${f.estado}</td>
-                <td>${f.clienteDenominacion}</td>
-                <td>$${f.importeTotal}</td>
-                <td>
-                  <button class="btn-danger btn-anular" data-id="${f.id}">Anular</button>
-                </td>
-            `;
-                tbody.appendChild(tr);
-            });
-            document.querySelectorAll('.btn-anular').forEach(button => {
-                button.addEventListener('click', (e) => __awaiter(this, void 0, void 0, function* () {
-                    const target = e.currentTarget;
-                    const idStr = target.getAttribute('data-id');
-                    if (idStr) {
-                        const id = parseInt(idStr);
-                        yield anularFactura(id);
-                    }
-                }));
-            });
-        }
-        catch (error) {
-            console.error('Error al cargar las facturas:', error);
-        }
-    });
+const IVA = 0.21; // mismo porcentaje que usa FacturaServicio en el backend
+const service = new FacturaService();
+const moneda = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
+let items = [];
+let catalogo = [];
+const cantidadesModal = new Map(); // cantidad elegida en el catálogo antes de agregar
+let facturas = []; // modo servidor: solo la página actual; modo local: todas
+const POR_PAGINA = 10;
+let pagina = 1;
+// Paginación en el servidor: el backend recibe page/size y devuelve solo la página pedida.
+// Si el backend todavía devuelve un array completo, se pagina en el navegador (modo local).
+let modoServidor = false;
+let totalFacturas = 0;
+let totalPaginas = 1;
+let resumen = null;
+let timerBusqueda;
+const $ = (id) => document.getElementById(id);
+function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
-function agregarFilaDetalle() {
-    const tbody = document.querySelector('#tablaDetalles tbody');
-    if (!tbody)
+function toast(msg, tipo = '') {
+    const el = document.createElement('div');
+    el.className = `toast ${tipo}`;
+    el.textContent = msg;
+    $('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+}
+const msgError = (e) => (e instanceof Error ? e.message : 'Error inesperado');
+// ---------- Listado ----------
+function leerFiltros() {
+    const desde = $('fDesde').value;
+    const hasta = $('fHasta').value;
+    const monto = $('fMonto').value;
+    return {
+        fechaDesde: desde ? `${desde}T00:00:00` : undefined,
+        fechaHasta: hasta ? `${hasta}T23:59:59` : undefined,
+        estado: $('fEstado').value || undefined,
+        montoMinimo: monto ? parseFloat(monto) : undefined,
+        id: $('fId').value.trim() || undefined,
+        cliente: $('fCliente').value.trim() || undefined,
+    };
+}
+function filaMensaje(texto) {
+    $('tablaFacturasBody').innerHTML = `<tr><td colspan="6" class="vacio">${esc(texto)}</td></tr>`;
+}
+// Solo modo local (backend viejo que devuelve todo): filtra por N.º y cliente sobre lo ya cargado
+function filtrarLocal() {
+    const id = $('fId').value.trim();
+    const cliente = $('fCliente').value.trim().toLowerCase();
+    return facturas.filter(f => (!id || String(f.id) === id) &&
+        (!cliente || (f.clienteDenominacion ?? '').toLowerCase().includes(cliente)));
+}
+function renderResumen(lista) {
+    if (modoServidor) {
+        // Los totales deben salir de TODOS los resultados filtrados, no solo de la página visible
+        $('statCantidad').textContent = String(totalFacturas);
+        $('statAnuladas').textContent = resumen ? String(resumen.anuladas) : '—';
+        $('statTotal').textContent = resumen ? moneda.format(resumen.importeVigente) : '—';
         return;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-        <td><input type="number" class="articuloId" value="1" required></td>
-        <td><input type="number" class="cantidad" value="1" required></td>
-        <td><input type="number" class="precioUnitario" value="1000" step="0.01" required></td>
-        <td><button type="button" class="btn-danger" onclick="this.parentElement.parentElement.remove()">X</button></td>
-    `;
-    tbody.appendChild(tr);
+    }
+    const vigentes = lista.filter(f => f.estado !== 'ANULADA');
+    $('statCantidad').textContent = String(lista.length);
+    $('statAnuladas').textContent = String(lista.length - vigentes.length);
+    $('statTotal').textContent = moneda.format(vigentes.reduce((a, f) => a + f.importeTotal, 0));
 }
-function guardarFactura(event) {
-    return __awaiter(this, void 0, void 0, function* () {
-        event.preventDefault();
-        const clienteInput = document.getElementById('clienteId');
-        const clienteId = parseInt(clienteInput.value);
-        const filas = document.querySelectorAll('#tablaDetalles tbody tr');
-        const detalles = [];
-        filas.forEach(fila => {
-            const articuloId = parseInt(fila.querySelector('.articuloId').value);
-            const cantidad = parseInt(fila.querySelector('.cantidad').value);
-            const precioUnitario = parseFloat(fila.querySelector('.precioUnitario').value);
-            detalles.push({ articuloId, cantidad, precioUnitario });
+function numerosDePagina(actual, total) {
+    if (total <= 7)
+        return Array.from({ length: total }, (_, k) => k + 1);
+    const set = new Set([1, total, actual - 1, actual, actual + 1].filter(n => n >= 1 && n <= total));
+    const orden = [...set].sort((a, b) => a - b);
+    const res = [];
+    orden.forEach((n, k) => { if (k > 0 && n - orden[k - 1] > 1)
+        res.push('…'); res.push(n); });
+    return res;
+}
+function renderPaginacion(total, totalPaginas) {
+    const cont = $('paginacion');
+    if (total === 0) {
+        cont.innerHTML = '';
+        return;
+    }
+    const desde = (pagina - 1) * POR_PAGINA + 1;
+    const hasta = Math.min(pagina * POR_PAGINA, total);
+    const botones = totalPaginas > 1 ? `<div class="pags">
+        <button class="btn sm pag" data-pag="${pagina - 1}" ${pagina === 1 ? 'disabled' : ''}>‹ Anterior</button>
+        ${numerosDePagina(pagina, totalPaginas).map(n => n === '…'
+        ? '<span class="muted">…</span>'
+        : `<button class="btn sm pag" data-pag="${n}" ${n === pagina ? 'aria-current="page"' : ''}>${n}</button>`).join('')}
+        <button class="btn sm pag" data-pag="${pagina + 1}" ${pagina === totalPaginas ? 'disabled' : ''}>Siguiente ›</button>
+    </div>` : '';
+    cont.innerHTML = `<span class="info">Mostrando ${desde}–${hasta} de ${total}</span>${botones}`;
+}
+function renderFacturas() {
+    let visibles;
+    if (modoServidor) {
+        renderResumen(facturas);
+        visibles = facturas;
+    }
+    else {
+        const lista = filtrarLocal();
+        totalFacturas = lista.length;
+        totalPaginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
+        pagina = Math.min(Math.max(1, pagina), totalPaginas);
+        renderResumen(lista);
+        visibles = lista.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+    }
+    renderPaginacion(totalFacturas, totalPaginas);
+    if (visibles.length === 0)
+        return filaMensaje('No hay comprobantes para los filtros elegidos.');
+    $('tablaFacturasBody').innerHTML = visibles.map(f => {
+        const anulada = f.estado === 'ANULADA';
+        const fecha = f.fechaEmision ? new Date(f.fechaEmision).toLocaleDateString('es-AR') : 'N/D';
+        return `<tr>
+            <td>#${f.id}</td>
+            <td>${fecha}</td>
+            <td>${esc(f.clienteDenominacion)}</td>
+            <td><span class="pill ${anulada ? 'bad' : 'ok'}">${esc(f.estado)}</span></td>
+            <td class="num">${moneda.format(f.importeTotal)}</td>
+            <td class="num"><button class="btn sm danger" data-anular="${f.id}" ${anulada ? 'disabled' : ''}>Anular</button></td>
+        </tr>`;
+    }).join('');
+}
+async function cargarFacturas(resetPagina = true) {
+    if (resetPagina)
+        pagina = 1;
+    filaMensaje('Cargando…');
+    try {
+        const resp = await service.obtenerFacturas({ ...leerFiltros(), page: pagina - 1, size: POR_PAGINA });
+        if (Array.isArray(resp)) {
+            modoServidor = false;
+            facturas = resp;
+            resumen = null;
+        }
+        else {
+            modoServidor = true;
+            facturas = resp.content;
+            totalFacturas = resp.totalElements;
+            totalPaginas = Math.max(1, resp.totalPages);
+            resumen = resp.resumen ?? null;
+            // Si la página pedida ya no existe (p. ej. se anuló la última), volver a la última válida
+            if (pagina > totalPaginas) {
+                pagina = totalPaginas;
+                return cargarFacturas(false);
+            }
+        }
+        renderFacturas();
+        marcarApi(true);
+    }
+    catch (e) {
+        facturas = [];
+        modoServidor = false;
+        renderResumen([]);
+        renderPaginacion(0, 1);
+        filaMensaje('No se pudo cargar el listado.');
+        marcarApi(false);
+        toast(msgError(e), 'error');
+    }
+}
+function marcarApi(ok) {
+    const el = $('estadoApi');
+    el.textContent = ok ? 'API conectada' : 'API sin conexión';
+    el.className = `pill ${ok ? 'ok' : 'bad'}`;
+}
+async function anularFactura(id) {
+    if (!confirm(`¿Anular la factura #${id}? Esta acción cambia su estado a ANULADA.`))
+        return;
+    try {
+        await service.eliminarFactura(id);
+        toast(`Factura #${id} anulada.`, 'exito');
+        await cargarFacturas(false);
+    }
+    catch (e) {
+        toast(msgError(e), 'error');
+    }
+}
+// ---------- Alta de factura ----------
+async function cargarClientes(seleccionarId) {
+    const select = $('clienteId');
+    try {
+        const clientes = await service.obtenerClientes();
+        select.innerHTML = '<option value="">Seleccioná un cliente…</option>' + clientes.map(c => `<option value="${c.id}">${esc(c.denominacion)}${c.cuit ? ' — ' + esc(c.cuit) : ''}</option>`).join('');
+        if (seleccionarId)
+            select.value = String(seleccionarId);
+        marcarApi(true);
+    }
+    catch (e) {
+        select.innerHTML = '<option value="">No se pudieron cargar los clientes</option>';
+        marcarApi(false);
+        toast(msgError(e), 'error');
+    }
+}
+function panelCliente(abrir) {
+    $('panelCliente').hidden = !abrir;
+    if (abrir)
+        $('nDenominacion').focus();
+    else
+        ['nDenominacion', 'nCuit', 'nDomicilio'].forEach(id => $(id).value = '');
+}
+async function guardarCliente() {
+    const denominacion = $('nDenominacion').value.trim();
+    if (!denominacion)
+        return toast('La denominación del cliente es obligatoria.', 'error');
+    const btn = $('btnGuardarCliente');
+    btn.disabled = true;
+    try {
+        const c = await service.crearCliente({
+            denominacion,
+            cuit: $('nCuit').value.trim() || undefined,
+            domicilio: $('nDomicilio').value.trim() || undefined,
         });
-        if (detalles.length === 0) {
-            alert('Debe agregar al menos un ítem a la factura.');
+        await cargarClientes(c.id);
+        panelCliente(false);
+        toast(`Cliente "${c.denominacion}" creado y seleccionado.`, 'exito');
+    }
+    catch (e) {
+        toast(msgError(e), 'error');
+    }
+    finally {
+        btn.disabled = false;
+    }
+}
+// ---------- Pestañas ----------
+function mostrarVista(vista) {
+    $('vistaNueva').hidden = vista !== 'nueva';
+    $('vistaLista').hidden = vista !== 'lista';
+    document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.vista === vista)));
+    if (vista === 'lista')
+        cargarFacturas();
+}
+function renderItems() {
+    $('sinItems').hidden = items.length > 0;
+    $('tablaDetalles').hidden = items.length === 0;
+    document.querySelector('#tablaDetalles tbody').innerHTML = items.map((it, i) => `<tr data-i="${i}">
+        <td class="nombre-art" data-nombre></td>
+        <td><input type="number" data-campo="articuloId" min="1" step="1" value="${it.articuloId}" required></td>
+        <td><input type="number" data-campo="cantidad" min="1" step="1" value="${it.cantidad}" required></td>
+        <td><input type="number" data-campo="precioUnitario" min="0" step="0.01" value="${it.precioUnitario}" required></td>
+        <td class="num" data-subtotal></td>
+        <td class="num"><button type="button" class="btn sm danger" data-quitar title="Quitar ítem" aria-label="Quitar ítem">✕</button></td>
+    </tr>`).join('');
+    actualizarTotales();
+}
+function actualizarTotales() {
+    let neto = 0;
+    document.querySelectorAll('#tablaDetalles tbody tr').forEach(tr => {
+        const it = items[Number(tr.dataset.i)];
+        const sub = (it.cantidad || 0) * (it.precioUnitario || 0);
+        neto += sub;
+        tr.querySelector('[data-subtotal]').textContent = moneda.format(sub);
+        const art = catalogo.find(a => a.id === it.articuloId);
+        const celdaNombre = tr.querySelector('[data-nombre]');
+        celdaNombre.textContent = art ? art.denominacion : '—';
+        celdaNombre.classList.toggle('sin', !art);
+    });
+    $('totNeto').textContent = moneda.format(neto);
+    $('totIva').textContent = moneda.format(neto * IVA);
+    $('totTotal').textContent = moneda.format(neto * (1 + IVA));
+    renderResumenCarrito(neto);
+}
+// ---------- Catálogo de artículos (ventana emergente tipo carrito) ----------
+async function cargarCatalogo() {
+    try {
+        catalogo = await service.obtenerArticulos();
+        marcarApi(true);
+        return true;
+    }
+    catch (e) {
+        catalogo = [];
+        toast(msgError(e), 'error');
+        return false;
+    }
+}
+function renderResumenCarrito(neto) {
+    const el = document.getElementById('resumenCarrito');
+    if (!el)
+        return;
+    const unidades = items.reduce((a, it) => a + (it.cantidad || 0), 0);
+    const subtotal = neto ?? items.reduce((a, it) => a + (it.cantidad || 0) * (it.precioUnitario || 0), 0);
+    el.innerHTML = items.length === 0
+        ? 'Carrito vacío'
+        : `<strong>${items.length}</strong> artículo${items.length === 1 ? '' : 's'} · ${unidades} u. · Neto <strong>${moneda.format(subtotal)}</strong>`;
+}
+function totalFila(art, cantidad) {
+    return `${cantidad} u. = ${moneda.format(art.precio * cantidad)}`;
+}
+function actualizarTotalFila(li, art, cantidad) {
+    li.querySelector('[data-total]').textContent = totalFila(art, cantidad);
+}
+function renderCatalogo() {
+    const q = $('buscarArticulo').value.trim().toLowerCase();
+    const lista = catalogo.filter(a => !q || a.denominacion.toLowerCase().includes(q) || (a.codigo ?? '').toLowerCase().includes(q));
+    if (lista.length === 0) {
+        $('listaArticulos').innerHTML = `<li class="vacio" style="padding:24px 20px">${catalogo.length === 0 ? 'No hay artículos cargados.' : 'Ningún artículo coincide con la búsqueda.'}</li>`;
+        return;
+    }
+    $('listaArticulos').innerHTML = lista.map(a => {
+        const cant = cantidadesModal.get(a.id) ?? 1;
+        const enCarrito = items.find(it => it.articuloId === a.id)?.cantidad ?? 0;
+        return `<li class="art" data-art="${a.id}">
+            <div class="art-info">
+                <div class="art-nombre" title="${esc(a.denominacion)}">${esc(a.denominacion)}</div>
+                <div class="art-cod">${esc(a.codigo)}${enCarrito ? ` · <span class="en-carrito">en carrito: ${enCarrito}</span>` : ''}</div>
+            </div>
+            <div class="art-precio">
+                <div>${moneda.format(a.precio)}</div>
+                <div class="art-total" data-total>${totalFila(a, cant)}</div>
+            </div>
+            <div class="stepper">
+                <button type="button" class="btn sm" data-menos aria-label="Menos">−</button>
+                <input type="number" data-cant min="1" step="1" value="${cant}" aria-label="Cantidad de ${esc(a.denominacion)}">
+                <button type="button" class="btn sm" data-mas aria-label="Más">+</button>
+            </div>
+            <button type="button" class="btn sm primary" data-agregar>Agregar</button>
+        </li>`;
+    }).join('');
+}
+function agregarAlCarrito(art, cantidad) {
+    const existente = items.find(it => it.articuloId === art.id);
+    if (existente)
+        existente.cantidad += cantidad;
+    else
+        items.push({ articuloId: art.id, cantidad, precioUnitario: art.precio });
+    cantidadesModal.set(art.id, 1);
+    renderItems();
+    renderCatalogo();
+    toast(`${cantidad} × ${art.denominacion} agregado al carrito.`, 'exito');
+}
+async function abrirCatalogo() {
+    const dlg = $('dlgCatalogo');
+    $('buscarArticulo').value = '';
+    cantidadesModal.clear();
+    dlg.showModal();
+    if (catalogo.length === 0) {
+        $('listaArticulos').innerHTML = '<li class="vacio" style="padding:24px 20px">Cargando artículos…</li>';
+        await cargarCatalogo();
+        actualizarTotales(); // ahora se pueden mostrar los nombres en la tabla
+    }
+    renderCatalogo();
+    renderResumenCarrito();
+    $('buscarArticulo').focus();
+}
+async function guardarFactura(e) {
+    e.preventDefault();
+    if (items.length === 0)
+        return toast('Agregá al menos un ítem.', 'error');
+    const btn = $('btnGuardar');
+    btn.disabled = true;
+    try {
+        const f = await service.crearFactura({
+            clienteId: Number($('clienteId').value),
+            fechaEmision: `${new Date().toISOString().split('T')[0]}T00:00:00`,
+            estado: 'EMITIDA',
+            detalles: items,
+        });
+        toast(`Factura #${f.id} creada por ${moneda.format(f.importeTotal)}.`, 'exito');
+        items = [];
+        $('formFactura').reset();
+        renderItems();
+        cargarFacturas();
+    }
+    catch (err) {
+        toast(msgError(err), 'error');
+    }
+    finally {
+        btn.disabled = false;
+    }
+}
+// ---------- Eventos ----------
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => mostrarVista(t.dataset.vista)));
+    $('formFiltros').addEventListener('submit', e => { e.preventDefault(); cargarFacturas(); });
+    $('btnLimpiar').addEventListener('click', () => { $('formFiltros').reset(); cargarFacturas(); });
+    // N.º y cliente: en modo servidor se piden al backend (con retardo para no hacer una consulta por tecla)
+    ['fId', 'fCliente'].forEach(id => $(id).addEventListener('input', () => {
+        if (!modoServidor) {
+            pagina = 1;
+            renderFacturas();
             return;
         }
-        const nuevaFactura = {
-            clienteId,
-            fechaEmision: new Date().toISOString().split('T')[0] + 'T00:00:00',
-            estado: 'EMITIDA',
-            detalles
+        clearTimeout(timerBusqueda);
+        timerBusqueda = window.setTimeout(() => cargarFacturas(), 300);
+    }));
+    $('paginacion').addEventListener('click', e => {
+        const btn = e.target.closest('[data-pag]');
+        if (!btn || btn.disabled)
+            return;
+        pagina = Number(btn.dataset.pag);
+        if (modoServidor)
+            cargarFacturas(false);
+        else
+            renderFacturas();
+    });
+    $('btnNuevoCliente').addEventListener('click', () => panelCliente(!!$('panelCliente').hidden));
+    $('btnCancelarCliente').addEventListener('click', () => panelCliente(false));
+    $('btnGuardarCliente').addEventListener('click', guardarCliente);
+    // Delegación: un solo listener para todos los botones "Anular"
+    $('tablaFacturasBody').addEventListener('click', e => {
+        const btn = e.target.closest('[data-anular]');
+        if (btn)
+            anularFactura(Number(btn.dataset.anular));
+    });
+    $('btnAgregarItem').addEventListener('click', () => {
+        items.push({ articuloId: 1, cantidad: 1, precioUnitario: 0 });
+        renderItems();
+    });
+    const tbodyItems = document.querySelector('#tablaDetalles tbody');
+    tbodyItems.addEventListener('input', e => {
+        const input = e.target;
+        const tr = input.closest('tr');
+        const campo = input.dataset.campo;
+        if (!tr || !campo)
+            return;
+        items[Number(tr.dataset.i)][campo] = parseFloat(input.value) || 0;
+        actualizarTotales(); // no re-renderiza las filas, así no se pierde el foco
+    });
+    tbodyItems.addEventListener('click', e => {
+        const tr = e.target.closest('tr');
+        if (tr && e.target.closest('[data-quitar]')) {
+            items.splice(Number(tr.dataset.i), 1);
+            renderItems();
+        }
+    });
+    // Catálogo
+    const dlg = $('dlgCatalogo');
+    $('btnCatalogo').addEventListener('click', abrirCatalogo);
+    $('btnCerrarCatalogo').addEventListener('click', () => dlg.close());
+    $('btnListoCatalogo').addEventListener('click', () => dlg.close());
+    dlg.addEventListener('click', e => { if (e.target === dlg)
+        dlg.close(); }); // clic en el fondo oscuro
+    $('buscarArticulo').addEventListener('input', renderCatalogo);
+    const lista = $('listaArticulos');
+    const articuloDe = (el) => {
+        const li = el.closest('[data-art]');
+        const art = li && catalogo.find(a => a.id === Number(li.dataset.art));
+        return li && art ? { li, art } : null;
+    };
+    lista.addEventListener('click', e => {
+        const t = e.target;
+        const ctx = articuloDe(t);
+        if (!ctx)
+            return;
+        const input = ctx.li.querySelector('[data-cant]');
+        const actual = Math.max(1, Math.floor(Number(input.value)) || 1);
+        const fijar = (n) => {
+            input.value = String(n);
+            cantidadesModal.set(ctx.art.id, n);
+            actualizarTotalFila(ctx.li, ctx.art, n);
         };
-        try {
-            yield facturaService.crearFactura(nuevaFactura);
-            alert('¡Factura creada con éxito!');
-            yield cargarFacturas();
-            document.getElementById('formFactura').reset();
-            document.querySelector('#tablaDetalles tbody').innerHTML = '';
-        }
-        catch (error) {
-            alert('Error al registrar la factura.');
-            console.error(error);
+        if (t.closest('[data-mas]'))
+            fijar(actual + 1);
+        else if (t.closest('[data-menos]'))
+            fijar(Math.max(1, actual - 1));
+        else if (t.closest('[data-agregar]'))
+            agregarAlCarrito(ctx.art, actual);
+    });
+    lista.addEventListener('input', e => {
+        const input = e.target;
+        const ctx = articuloDe(input);
+        if (ctx && input.matches('[data-cant]')) {
+            const n = Math.max(1, Math.floor(Number(input.value)) || 1);
+            cantidadesModal.set(ctx.art.id, n);
+            actualizarTotalFila(ctx.li, ctx.art, n);
         }
     });
-}
-function anularFactura(id) {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (confirm(`¿Estás seguro de anular la factura ID ${id}?`)) {
-            try {
-                yield facturaService.eliminarFactura(id);
-                alert('Factura anulada correctamente.');
-                yield cargarFacturas();
-            }
-            catch (error) {
-                console.error('DETALLE DEL ERROR AL ELIMINAR:', error);
-                alert('Error al anular la factura. Revisa la consola.');
-            }
-        }
-    });
-}
+    $('formFactura').addEventListener('submit', guardarFactura);
+    renderItems();
+    cargarClientes();
+    cargarCatalogo().then(() => actualizarTotales());
+});

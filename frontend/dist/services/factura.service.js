@@ -23,6 +23,7 @@ export class FacturaService {
     json(method, body) {
         return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
     }
+    // Devuelve una página (backend nuevo) o el listado completo (backend viejo)
     obtenerFacturas(filtros = {}) {
         const params = new URLSearchParams();
         Object.entries(filtros).forEach(([k, v]) => {
@@ -31,6 +32,13 @@ export class FacturaService {
         });
         const qs = params.toString();
         return this.request(`/facturas${qs ? `?${qs}` : ''}`);
+    }
+    // Comprobante completo (cabecera + ítems + totales) para ver/imprimir
+    obtenerComprobante(id) {
+        return this.request(`/facturas/${id}`);
+    }
+    obtenerArticulos() {
+        return this.request('/articulos');
     }
     obtenerClientes() {
         return this.request('/clientes');

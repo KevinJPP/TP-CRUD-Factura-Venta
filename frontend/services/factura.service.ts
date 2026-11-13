@@ -1,5 +1,5 @@
 import {
-    ClienteDTO, ClienteRequestDTO, FacturaFiltrosDTO, FacturaReporteDTO, FacturaRequestDTO
+    ArticuloDTO, ClienteDTO, ClienteRequestDTO, FacturaComprobanteDTO, FacturaFiltrosDTO, FacturaReporteDTO, FacturaRequestDTO, PaginaDTO
 } from '../models/factura.dto.js';
 
 export class FacturaService {
@@ -24,13 +24,23 @@ export class FacturaService {
         return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
     }
 
-    obtenerFacturas(filtros: FacturaFiltrosDTO = {}): Promise<FacturaReporteDTO[]> {
+    // Devuelve una página (backend nuevo) o el listado completo (backend viejo)
+    obtenerFacturas(filtros: FacturaFiltrosDTO = {}): Promise<PaginaDTO<FacturaReporteDTO> | FacturaReporteDTO[]> {
         const params = new URLSearchParams();
         Object.entries(filtros).forEach(([k, v]) => {
             if (v !== undefined && v !== null && v !== '') params.append(k, String(v));
         });
         const qs = params.toString();
         return this.request(`/facturas${qs ? `?${qs}` : ''}`);
+    }
+
+    // Comprobante completo (cabecera + ítems + totales) para ver/imprimir
+    obtenerComprobante(id: number): Promise<FacturaComprobanteDTO> {
+        return this.request(`/facturas/${id}`);
+    }
+
+    obtenerArticulos(): Promise<ArticuloDTO[]> {
+        return this.request('/articulos');
     }
 
     obtenerClientes(): Promise<ClienteDTO[]> {

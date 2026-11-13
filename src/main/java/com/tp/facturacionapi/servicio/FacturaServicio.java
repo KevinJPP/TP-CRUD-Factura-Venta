@@ -3,7 +3,9 @@ package com.tp.facturacionapi.servicio;
 import com.tp.facturacionapi.modelo.*;
 import com.tp.facturacionapi.repositorio.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -112,6 +114,58 @@ public class FacturaServicio {
                 facturaActualizada.getEstado(),
                 facturaActualizada.getImporteTotal(),
                 facturaActualizada.getCliente().getDenominacion()
+        );
+    }
+
+    /**
+     * Arma el comprobante completo de una factura (cabecera, cliente, ítems y totales).
+     * Es readOnly y transaccional para poder recorrer las relaciones LAZY sin errores.
+     */
+    @Transactional(readOnly = true)
+    public FacturaComprobanteDTO obtenerComprobante(Long id) {
+        FacturaVenta f = facturaVentaRepositorio.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Factura no encontrada con ID: " + id));
+
+        List<FacturaComprobanteDTO.Item> items = new ArrayList<>();
+        double neto = 0.0;
+        for (FacturaVentaDetalle d : f.getDetalles()) {
+            double cantidad = d.getCantidad() != null ? d.getCantidad() : 0.0;
+            double precio = d.getPrecioUnitario() != null ? d.getPrecioUnitario() : 0.0;
+            double subtotal = cantidad * precio;
+            neto += subtotal;
+
+            Articulo a = d.getArticulo();
+            items.add(new FacturaComprobanteDTO.Item(
+                    a != null ? a.getId() : null,
+                    a != null ? a.getCodigo() : null,
+                    a != null ? a.getDenominacion() : "Artículo sin datos",
+                    cantidad,
+                    precio,
+                    subtotal
+            ));
+        }
+
+        Cliente c = f.getCliente();
+        PuntoVenta pv = f.getPuntoVenta();
+
+        return new FacturaComprobanteDTO(
+                f.getId(),
+                f.getNumero(),
+                pv != null ? pv.getNumero() : null,
+                pv != null ? pv.getDomicilioComercial() : null,
+                f.getFechaEmision(),
+                f.getEstado(),
+                f.getCondicionIva() != null ? f.getCondicionIva().getDenominacion() : null,
+                f.getTipoMoneda() != null ? f.getTipoMoneda().getDenominacion() : null,
+                f.getCae(),
+                f.getCaeFechaVencimiento(),
+                c != null ? c.getDenominacion() : null,
+                c != null ? c.getCuit() : null,
+                c != null ? c.getDomicilio() : null,
+                items,
+                neto,
+                f.getImporteTotal() - neto, // IVA = total guardado - neto (21% al crear)
+                f.getImporteTotal()
         );
     }
 
