@@ -37,6 +37,10 @@ public class FacturaComprobanteDTO {
     private Double importeIva;
     private Double importeTotal;
 
+    // Resultado del pedido de CAE a ARCA (para saber por qué un comprobante quedó sin CAE)
+    private String resultadoAfip;
+    private String motivoRechazo;
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

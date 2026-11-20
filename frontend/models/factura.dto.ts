@@ -50,19 +50,23 @@ export interface PaginaDTO<T> {
     resumen?: ResumenFacturasDTO;
 }
 
-// Espeja la entidad Cliente que devuelve GET /api/clientes
-export interface ClienteDTO {
-    id: number;
-    denominacion: string;
-    cuit?: string;
-    domicilio?: string;
-}
-
-// Cuerpo de POST /api/clientes
+// Datos de un cliente (entidad Cliente del backend)
 export interface ClienteRequestDTO {
     denominacion: string;
     cuit?: string;
+    condicionIva?: string;
+    email?: string;
+    telefono?: string;
     domicilio?: string;
+    localidad?: string;
+    provincia?: string;
+    codigoPostal?: string;
+    observaciones?: string;
+}
+
+// Espeja la entidad Cliente que devuelve GET /api/clientes
+export interface ClienteDTO extends ClienteRequestDTO {
+    id: number;
 }
 
 // Espeja ArticuloDTO de GET /api/articulos (artículo + precio de venta vigente)
@@ -101,4 +105,6 @@ export interface FacturaComprobanteDTO {
     importeNeto: number;
     importeIva: number;
     importeTotal: number;
+    resultadoAfip?: string | null;
+    motivoRechazo?: string | null;
 }

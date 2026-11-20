@@ -3,6 +3,7 @@ const IVA = 0.21; // mismo porcentaje que usa FacturaServicio en el backend
 const service = new FacturaService();
 const moneda = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
 let items = [];
+let clientes = [];
 let catalogo = [];
 const cantidadesModal = new Map(); // cantidad elegida en el catálogo antes de agregar
 let facturas = []; // modo servidor: solo la página actual; modo local: todas
@@ -233,7 +234,8 @@ function htmlComprobante(c) {
     <footer class="cp-pie">
         ${c.cae
         ? `CAE: ${esc(c.cae)} — Vto. CAE: ${fechaAR(c.caeFechaVencimiento)}`
-        : 'Comprobante sin CAE — documento no válido como factura fiscal.'}
+        : `Comprobante sin CAE — documento no válido como factura fiscal.${c.motivoRechazo
+            ? `<br>Motivo informado por ARCA: ${esc(c.motivoRechazo)}` : ''}`}
     </footer>`;
 }
 function cerrarComprobante() {
@@ -274,46 +276,243 @@ function imprimirComprobante() {
     window.print();
 }
 // ---------- Alta de factura ----------
+// Buscador de cliente (combobox): filtra por nombre o CUIT, sin tildes ni mayúsculas
+const MAX_OPCIONES = 50;
+let opcionesCliente = [];
+let opcionActiva = -1;
+const normalizar = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function filtrarClientes(texto) {
+    const tokens = normalizar(texto).split(/\s+/).filter(Boolean);
+    if (tokens.length === 0)
+        return clientes;
+    return clientes.filter(c => {
+        const base = normalizar(c.denominacion);
+        const cuit = (c.cuit ?? '').replace(/\D/g, '');
+        return tokens.every(t => base.includes(t) || (/\d/.test(t) && cuit.includes(t.replace(/\D/g, ''))));
+    });
+}
+const etiquetaCliente = (c) => c.denominacion;
+function abrirLista(abierta) {
+    $('clienteLista').hidden = !abierta;
+    $('clienteBuscar').setAttribute('aria-expanded', String(abierta));
+    if (!abierta)
+        opcionActiva = -1;
+}
+function renderListaClientes(texto) {
+    const lista = $('clienteLista');
+    const sel = Number($('clienteId').value);
+    const coincidencias = filtrarClientes(texto);
+    opcionesCliente = coincidencias.slice(0, MAX_OPCIONES);
+    opcionActiva = opcionesCliente.length > 0 ? 0 : -1;
+    if (clientes.length === 0) {
+        lista.innerHTML = '<li class="combo-msg">No hay clientes cargados.</li>';
+    }
+    else if (opcionesCliente.length === 0) {
+        lista.innerHTML = '<li class="combo-msg">Ningún cliente coincide con la búsqueda.</li>';
+    }
+    else {
+        lista.innerHTML = opcionesCliente.map((c, i) => `<li class="combo-op${i === opcionActiva ? ' activa' : ''}" role="option" id="op-cliente-${c.id}" data-i="${i}" aria-selected="${c.id === sel}">
+            <span class="combo-nombre">${esc(c.denominacion)}</span>
+            ${c.cuit ? `<span class="combo-cuit">${esc(c.cuit)}</span>` : ''}
+        </li>`).join('') + (coincidencias.length > MAX_OPCIONES
+            ? `<li class="combo-msg">Mostrando ${MAX_OPCIONES} de ${coincidencias.length}. Seguí escribiendo para afinar.</li>` : '');
+    }
+    marcarActiva();
+}
+function marcarActiva() {
+    const ops = $('clienteLista').querySelectorAll('.combo-op');
+    ops.forEach((li, i) => li.classList.toggle('activa', i === opcionActiva));
+    const activa = ops[opcionActiva];
+    if (activa) {
+        $('clienteBuscar').setAttribute('aria-activedescendant', activa.id);
+        activa.scrollIntoView({ block: 'nearest' });
+    }
+    else {
+        $('clienteBuscar').removeAttribute('aria-activedescendant');
+    }
+}
+function elegirCliente(c) {
+    $('clienteId').value = c ? String(c.id) : '';
+    $('clienteBuscar').value = c ? etiquetaCliente(c) : '';
+    abrirLista(false);
+    mostrarResumenCliente();
+}
+// Al salir del campo sin elegir nada, vuelve a mostrar el cliente que estaba seleccionado
+function restaurarTextoCliente() {
+    const c = clientes.find(x => x.id === Number($('clienteId').value));
+    $('clienteBuscar').value = c ? etiquetaCliente(c) : '';
+}
+function iniciarBuscadorCliente() {
+    const input = $('clienteBuscar');
+    const lista = $('clienteLista');
+    input.addEventListener('focus', () => { input.select(); renderListaClientes(''); abrirLista(true); });
+    input.addEventListener('click', () => { if (lista.hidden) {
+        renderListaClientes('');
+        abrirLista(true);
+    } });
+    input.addEventListener('input', () => {
+        $('clienteId').value = ''; // al escribir se descarta la selección anterior
+        mostrarResumenCliente();
+        renderListaClientes(input.value);
+        abrirLista(true);
+    });
+    input.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (lista.hidden) {
+                renderListaClientes('');
+                abrirLista(true);
+                return;
+            }
+            if (opcionesCliente.length === 0)
+                return;
+            const paso = e.key === 'ArrowDown' ? 1 : -1;
+            opcionActiva = (opcionActiva + paso + opcionesCliente.length) % opcionesCliente.length;
+            marcarActiva();
+        }
+        else if (e.key === 'Enter') {
+            if (!lista.hidden) {
+                e.preventDefault(); // que no envíe el formulario
+                const c = opcionesCliente[opcionActiva];
+                if (c)
+                    elegirCliente(c);
+            }
+        }
+        else if (e.key === 'Escape' && !lista.hidden) {
+            e.preventDefault();
+            abrirLista(false);
+            restaurarTextoCliente();
+        }
+    });
+    input.addEventListener('blur', () => { abrirLista(false); restaurarTextoCliente(); });
+    // mousedown (y no click) para elegir antes de que el input pierda el foco
+    lista.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const li = e.target.closest('.combo-op');
+        if (li)
+            elegirCliente(opcionesCliente[Number(li.dataset.i)]);
+    });
+}
 async function cargarClientes(seleccionarId) {
-    const select = $('clienteId');
+    const input = $('clienteBuscar');
     try {
-        const clientes = await service.obtenerClientes();
-        select.innerHTML = '<option value="">Seleccioná un cliente…</option>' + clientes.map(c => `<option value="${c.id}">${esc(c.denominacion)}${c.cuit ? ' — ' + esc(c.cuit) : ''}</option>`).join('');
-        if (seleccionarId)
-            select.value = String(seleccionarId);
+        clientes = await service.obtenerClientes();
+        input.disabled = false;
+        input.placeholder = 'Buscar cliente por nombre o CUIT…';
+        const elegido = seleccionarId ? clientes.find(c => c.id === seleccionarId) ?? null : null;
+        if (elegido)
+            elegirCliente(elegido);
+        else
+            restaurarTextoCliente();
         marcarApi(true);
     }
     catch (e) {
-        select.innerHTML = '<option value="">No se pudieron cargar los clientes</option>';
+        clientes = [];
+        input.disabled = true;
+        input.placeholder = 'No se pudieron cargar los clientes';
         marcarApi(false);
         toast(msgError(e), 'error');
     }
+    mostrarResumenCliente();
 }
-function panelCliente(abrir) {
-    $('panelCliente').hidden = !abrir;
-    if (abrir)
-        $('nDenominacion').focus();
-    else
-        ['nDenominacion', 'nCuit', 'nDomicilio'].forEach(id => $(id).value = '');
+// Línea con los datos del cliente elegido, debajo del selector
+function mostrarResumenCliente() {
+    const el = $('resumenCliente');
+    const id = Number($('clienteId').value);
+    const c = clientes.find(x => x.id === id);
+    if (!c) {
+        el.hidden = true;
+        el.innerHTML = '';
+        return;
+    }
+    const lugar = [c.domicilio, c.localidad, c.provincia].filter(Boolean).join(', ');
+    const domicilio = lugar && c.codigoPostal ? `${lugar} (CP ${c.codigoPostal})` : lugar;
+    const partes = [
+        ['CUIT', c.cuit], ['IVA', c.condicionIva], ['Email', c.email], ['Tel.', c.telefono], ['Domicilio', domicilio],
+    ];
+    const html = partes.filter(([, v]) => v).map(([k, v]) => `<span>${k}: <strong>${esc(v)}</strong></span>`).join('');
+    el.innerHTML = html;
+    el.hidden = !html;
 }
-async function guardarCliente() {
-    const denominacion = $('nDenominacion').value.trim();
-    if (!denominacion)
-        return toast('La denominación del cliente es obligatoria.', 'error');
+// ---------- Nuevo cliente (ventana emergente) ----------
+const PROVINCIAS = [
+    'Buenos Aires', 'Ciudad Autónoma de Buenos Aires', 'Catamarca', 'Chaco', 'Chubut', 'Córdoba', 'Corrientes',
+    'Entre Ríos', 'Formosa', 'Jujuy', 'La Pampa', 'La Rioja', 'Mendoza', 'Misiones', 'Neuquén', 'Río Negro',
+    'Salta', 'San Juan', 'San Luis', 'Santa Cruz', 'Santa Fe', 'Santiago del Estero', 'Tierra del Fuego', 'Tucumán',
+];
+const CAMPOS_CLIENTE = [
+    'cDenominacion', 'cCuit', 'cCondicionIva', 'cEmail', 'cTelefono',
+    'cDomicilio', 'cLocalidad', 'cProvincia', 'cCodigoPostal', 'cObservaciones',
+];
+const valorCampo = (id) => $(id).value.trim();
+function errorCampo(id, mensaje = '') {
+    $(id).classList.toggle('invalido', mensaje !== '');
+    const aviso = document.querySelector(`[data-error="${id}"]`);
+    if (aviso)
+        aviso.textContent = mensaje;
+}
+// 20123456789 -> 20-12345678-9 (mientras se escribe)
+function formatearCuit(texto) {
+    const d = texto.replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 2)
+        return d;
+    if (d.length <= 10)
+        return `${d.slice(0, 2)}-${d.slice(2)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 10)}-${d.slice(10)}`;
+}
+// Devuelve el id del primer campo inválido (o null si está todo bien)
+function validarCliente() {
+    let primero = null;
+    const marcar = (id, msg) => { errorCampo(id, msg); if (msg && !primero)
+        primero = id; };
+    marcar('cDenominacion', valorCampo('cDenominacion') ? '' : 'La denominación es obligatoria.');
+    const cuit = valorCampo('cCuit');
+    marcar('cCuit', cuit && cuit.replace(/\D/g, '').length !== 11 ? 'El CUIT debe tener 11 dígitos.' : '');
+    const email = valorCampo('cEmail');
+    marcar('cEmail', email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? 'El email no es válido.' : '');
+    const tel = valorCampo('cTelefono');
+    const telValido = /^[0-9 +()\-]+$/.test(tel) && tel.replace(/\D/g, '').length >= 6;
+    marcar('cTelefono', tel && !telValido ? 'Ingresá un teléfono válido.' : '');
+    return primero;
+}
+function abrirDialogoCliente() {
+    $('formCliente').reset();
+    CAMPOS_CLIENTE.forEach(id => errorCampo(id));
+    const dlg = $('dlgCliente');
+    dlg.showModal();
+    $('cDenominacion').focus();
+    $('dlgCliente').querySelector('.modal-cuerpo').scrollTop = 0;
+}
+async function guardarCliente(e) {
+    e.preventDefault();
+    const invalido = validarCliente();
+    if (invalido) {
+        $(invalido).focus();
+        return;
+    }
+    const dato = (id) => valorCampo(id) || undefined;
+    const nuevo = {
+        denominacion: valorCampo('cDenominacion'),
+        cuit: dato('cCuit'),
+        condicionIva: dato('cCondicionIva'),
+        email: dato('cEmail'),
+        telefono: dato('cTelefono'),
+        domicilio: dato('cDomicilio'),
+        localidad: dato('cLocalidad'),
+        provincia: dato('cProvincia'),
+        codigoPostal: dato('cCodigoPostal'),
+        observaciones: dato('cObservaciones'),
+    };
     const btn = $('btnGuardarCliente');
     btn.disabled = true;
     try {
-        const c = await service.crearCliente({
-            denominacion,
-            cuit: $('nCuit').value.trim() || undefined,
-            domicilio: $('nDomicilio').value.trim() || undefined,
-        });
+        const c = await service.crearCliente(nuevo);
         await cargarClientes(c.id);
-        panelCliente(false);
+        $('dlgCliente').close();
         toast(`Cliente "${c.denominacion}" creado y seleccionado.`, 'exito');
     }
-    catch (e) {
-        toast(msgError(e), 'error');
+    catch (err) {
+        toast(msgError(err), 'error'); // el diálogo queda abierto para no perder lo escrito
     }
     finally {
         btn.disabled = false;
@@ -332,7 +531,6 @@ function renderItems() {
     $('tablaDetalles').hidden = items.length === 0;
     document.querySelector('#tablaDetalles tbody').innerHTML = items.map((it, i) => `<tr data-i="${i}">
         <td class="nombre-art" data-nombre></td>
-        <td><input type="number" data-campo="articuloId" min="1" step="1" value="${it.articuloId}" required></td>
         <td><input type="number" data-campo="cantidad" min="1" step="1" value="${it.cantidad}" required></td>
         <td><input type="number" data-campo="precioUnitario" min="0" step="0.01" value="${it.precioUnitario}" required></td>
         <td class="num" data-subtotal></td>
@@ -441,13 +639,19 @@ async function abrirCatalogo() {
 }
 async function guardarFactura(e) {
     e.preventDefault();
+    const clienteId = Number($('clienteId').value);
+    if (!clienteId) {
+        toast('Elegí un cliente de la lista.', 'error');
+        $('clienteBuscar').focus();
+        return;
+    }
     if (items.length === 0)
         return toast('Agregá al menos un ítem.', 'error');
     const btn = $('btnGuardar');
     btn.disabled = true;
     try {
         const f = await service.crearFactura({
-            clienteId: Number($('clienteId').value),
+            clienteId,
             fechaEmision: `${new Date().toISOString().split('T')[0]}T00:00:00`,
             estado: 'EMITIDA',
             detalles: items,
@@ -455,6 +659,7 @@ async function guardarFactura(e) {
         toast(`Factura #${f.id} creada por ${moneda.format(f.importeTotal)}.`, 'exito');
         items = [];
         $('formFactura').reset();
+        mostrarResumenCliente();
         renderItems();
         cargarFacturas();
     }
@@ -490,9 +695,19 @@ document.addEventListener('DOMContentLoaded', () => {
         else
             renderFacturas();
     });
-    $('btnNuevoCliente').addEventListener('click', () => panelCliente(!!$('panelCliente').hidden));
-    $('btnCancelarCliente').addEventListener('click', () => panelCliente(false));
-    $('btnGuardarCliente').addEventListener('click', guardarCliente);
+    // Nuevo cliente (ventana emergente). Solo se cierra con ✕, Cancelar o Esc: un clic suelto afuera no pierde lo escrito
+    $('cProvincia').innerHTML = '<option value="">Sin especificar</option>' +
+        PROVINCIAS.map(p => `<option>${esc(p)}</option>`).join('');
+    $('btnNuevoCliente').addEventListener('click', abrirDialogoCliente);
+    $('btnCerrarCliente').addEventListener('click', () => $('dlgCliente').close());
+    $('btnCancelarCliente').addEventListener('click', () => $('dlgCliente').close());
+    $('formCliente').addEventListener('submit', guardarCliente);
+    $('cCuit').addEventListener('input', e => {
+        const input = e.target;
+        input.value = formatearCuit(input.value);
+    });
+    CAMPOS_CLIENTE.forEach(id => $(id).addEventListener('input', () => errorCampo(id))); // limpia el error al corregir
+    iniciarBuscadorCliente();
     // Delegación: un solo listener para todos los botones "Anular"
     $('tablaFacturasBody').addEventListener('click', e => {
         const t = e.target;
@@ -516,10 +731,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && !$('modalComprobante').hidden)
             cerrarComprobante();
-    });
-    $('btnAgregarItem').addEventListener('click', () => {
-        items.push({ articuloId: 1, cantidad: 1, precioUnitario: 0 });
-        renderItems();
     });
     const tbodyItems = document.querySelector('#tablaDetalles tbody');
     tbodyItems.addEventListener('input', e => {

@@ -36,6 +36,16 @@ input:focus-visible, select:focus-visible, .btn:focus-visible { outline: 2px sol
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; }
 .actions { display: flex; gap: 8px; }
 .cliente { max-width: 420px; margin-bottom: 16px; }
+.campo-cliente { flex: 1; min-width: 220px; max-width: 420px; display: grid; gap: 4px; }
+.campo-cliente > label { display: block; }
+.combo { position: relative; }
+.combo-lista { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5; list-style: none; margin: 0; padding: 4px; max-height: 280px; overflow-y: auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.combo-op { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.combo-op.activa { background: var(--bg); outline: 1px solid var(--accent); }
+.combo-op[aria-selected="true"] .combo-nombre { color: var(--accent); }
+.combo-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.combo-cuit { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.combo-msg { padding: 10px; color: var(--muted); font-size: .85rem; text-align: center; }
 
 .btn { font: inherit; cursor: pointer; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
 .btn:hover:not(:disabled) { border-color: var(--accent); }
@@ -75,8 +85,21 @@ td input { min-width: 90px; }
 .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 .fila-cliente { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
 .fila-cliente label { flex: 1; min-width: 220px; max-width: 420px; }
-.panel-cliente { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
-.panel-cliente .grid { margin-bottom: 12px; }
+.resumen-cliente { margin: 12px 0 0; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: .85rem; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.resumen-cliente strong { color: var(--text); font-weight: 600; }
+
+/* ---------- Ventana emergente: nuevo cliente ---------- */
+.modal-cuerpo { overflow-y: auto; padding: 4px 20px 8px; flex: 1; }
+.seccion-form { margin: 14px 0 8px; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.form-grid .ancho { grid-column: 1 / -1; }
+.form-grid .req { color: var(--bad); }
+.campo-error { color: var(--bad); font-size: .75rem; min-height: 1em; }
+input.invalido, select.invalido, textarea.invalido { border-color: var(--bad); }
+textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; resize: vertical; min-height: 64px; }
+textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.modal-foot .actions { margin-left: auto; }
+@media (max-width: 520px) { .form-grid { grid-template-columns: 1fr; } }
 .paginacion { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
 .paginacion:empty { display: none; }
 .paginacion .info { color: var(--muted); font-size: .85rem; }
@@ -166,30 +189,27 @@ body.modal-abierto { overflow: hidden; }
             <h2>Nueva factura</h2>
 
             <div class="fila-cliente">
-                <label>Cliente
-                    <select id="clienteId" required><option value="">Cargando clientes…</option></select>
-                </label>
+                <div class="campo-cliente">
+                    <label for="clienteBuscar">Cliente</label>
+                    <div class="combo">
+                        <input type="text" id="clienteBuscar" role="combobox" aria-autocomplete="list"
+                               aria-expanded="false" aria-controls="clienteLista"
+                               placeholder="Cargando clientes…" autocomplete="off" disabled>
+                        <input type="hidden" id="clienteId">
+                        <ul id="clienteLista" class="combo-lista" role="listbox" hidden></ul>
+                    </div>
+                </div>
                 <button type="button" id="btnNuevoCliente" class="btn">+ Nuevo cliente</button>
             </div>
 
-            <div id="panelCliente" class="panel-cliente" hidden>
-                <div class="grid">
-                    <label>Denominación * <input type="text" id="nDenominacion" placeholder="Razón social o nombre"></label>
-                    <label>CUIT <input type="text" id="nCuit" placeholder="20-12345678-9"></label>
-                    <label>Domicilio <input type="text" id="nDomicilio"></label>
-                </div>
-                <div class="actions">
-                    <button type="button" id="btnGuardarCliente" class="btn primary">Guardar cliente</button>
-                    <button type="button" id="btnCancelarCliente" class="btn">Cancelar</button>
-                </div>
-            </div>
+            <p id="resumenCliente" class="resumen-cliente" hidden></p>
 
             <h2 style="margin-top:24px">Ítems</h2>
             <div class="table-wrap">
                 <table id="tablaDetalles">
                     <thead>
                     <tr>
-                        <th>Artículo</th><th>Artículo ID</th><th>Cantidad</th><th>Precio unitario</th>
+                        <th>Artículo</th><th>Cantidad</th><th>Precio unitario</th>
                         <th class="num">Subtotal</th><th></th>
                     </tr>
                     </thead>
@@ -201,7 +221,6 @@ body.modal-abierto { overflow: hidden; }
             <div class="form-footer">
                 <div class="acciones-items">
                     <button type="button" id="btnCatalogo" class="btn primary">🛒 Elegir artículos</button>
-                    <button type="button" id="btnAgregarItem" class="btn">+ Agregar ítem manual</button>
                 </div>
                 <dl class="totales">
                     <div><dt>Neto</dt><dd id="totNeto">$ 0,00</dd></div>
@@ -261,6 +280,80 @@ body.modal-abierto { overflow: hidden; }
     </div>
 </main>
 
+<!-- ========== NUEVO CLIENTE (ventana emergente) ========== -->
+<dialog id="dlgCliente" class="modal" aria-labelledby="tituloCliente">
+    <div class="modal-head">
+        <h2 id="tituloCliente">Nuevo cliente</h2>
+        <button type="button" class="btn sm" id="btnCerrarCliente" aria-label="Cerrar">✕</button>
+    </div>
+    <form id="formCliente" novalidate style="display:contents">
+        <div class="modal-cuerpo">
+            <p class="seccion-form">Datos fiscales</p>
+            <div class="form-grid">
+                <label class="ancho">Denominación <span class="req">*</span>
+                    <input type="text" id="cDenominacion" placeholder="Razón social o nombre y apellido" maxlength="120" autocomplete="off">
+                    <span class="campo-error" data-error="cDenominacion"></span>
+                </label>
+                <label>CUIT / CUIL
+                    <input type="text" id="cCuit" placeholder="20-12345678-9" inputmode="numeric" maxlength="13" autocomplete="off">
+                    <span class="campo-error" data-error="cCuit"></span>
+                </label>
+                <label>Condición frente al IVA
+                    <select id="cCondicionIva">
+                        <option value="">Sin especificar</option>
+                        <option>Responsable Inscripto</option>
+                        <option>Monotributista</option>
+                        <option>IVA Exento</option>
+                        <option>Consumidor Final</option>
+                    </select>
+                </label>
+            </div>
+
+            <p class="seccion-form">Contacto</p>
+            <div class="form-grid">
+                <label>Email
+                    <input type="email" id="cEmail" placeholder="cliente@ejemplo.com" maxlength="120" autocomplete="off">
+                    <span class="campo-error" data-error="cEmail"></span>
+                </label>
+                <label>Teléfono
+                    <input type="tel" id="cTelefono" placeholder="261 555-1234" maxlength="30" autocomplete="off">
+                    <span class="campo-error" data-error="cTelefono"></span>
+                </label>
+            </div>
+
+            <p class="seccion-form">Domicilio</p>
+            <div class="form-grid">
+                <label class="ancho">Dirección
+                    <input type="text" id="cDomicilio" placeholder="Calle y número" maxlength="150" autocomplete="off">
+                </label>
+                <label>Localidad
+                    <input type="text" id="cLocalidad" maxlength="80" autocomplete="off">
+                </label>
+                <label>Provincia
+                    <select id="cProvincia"></select>
+                </label>
+                <label>Código postal
+                    <input type="text" id="cCodigoPostal" placeholder="5500" maxlength="8" autocomplete="off">
+                </label>
+            </div>
+
+            <p class="seccion-form">Otros</p>
+            <div class="form-grid">
+                <label class="ancho">Observaciones
+                    <textarea id="cObservaciones" maxlength="500" placeholder="Notas internas sobre el cliente (opcional)"></textarea>
+                </label>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <span class="resumen"><span class="req" style="color:var(--bad)">*</span> Campo obligatorio</span>
+            <div class="actions">
+                <button type="button" class="btn" id="btnCancelarCliente">Cancelar</button>
+                <button type="submit" class="btn primary" id="btnGuardarCliente">Guardar cliente</button>
+            </div>
+        </div>
+    </form>
+</dialog>
+
 <!-- ========== CATÁLOGO DE ARTÍCULOS (ventana emergente) ========== -->
 <dialog id="dlgCatalogo" class="modal" aria-labelledby="tituloCatalogo">
     <div class="modal-head">
@@ -292,6 +385,6 @@ body.modal-abierto { overflow: hidden; }
     </div>
 </div>
 
-<script type="module" src="dist/app.js?v=3"></script>
+<script type="module" src="dist/app.js?v=5"></script>
 </body>
 </html>

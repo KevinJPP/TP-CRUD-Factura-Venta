@@ -1,5 +1,6 @@
 package com.tp.facturacionapi.servicio;
 
+import com.tp.facturacionapi.arca.ArcaWsfeService;
 import com.tp.facturacionapi.modelo.*;
 import com.tp.facturacionapi.repositorio.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +16,8 @@ import java.util.List;
 @Service
 public class FacturaServicio {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(FacturaServicio.class);
+
     @Autowired
     private FacturaVentaRepositorio facturaVentaRepositorio;
 
@@ -24,6 +27,9 @@ public class FacturaServicio {
     @Autowired
     private ArticuloRepositorio articuloRepositorio;
 
+    @Autowired
+    private ArcaWsfeService arcaWsfeService;
+
     @Transactional
     public FacturaReporteDTO crearFactura(FacturaRequestDTO dto) {
         Cliente cliente = clienteRepositorio.findById(dto.getClienteId())
@@ -31,7 +37,8 @@ public class FacturaServicio {
 
         FacturaVenta factura = new FacturaVenta();
         factura.setNumero(System.currentTimeMillis());
-        factura.setFechaEmision(dto.getFechaEmision() != null ? dto.getFechaEmision() : LocalDateTime.now());
+        LocalDateTime fechaEmision = dto.getFechaEmision() != null ? dto.getFechaEmision() : LocalDateTime.now();
+        factura.setFechaEmision(fechaEmision);
         factura.setEstado(dto.getEstado() != null ? dto.getEstado() : "EMITIDA");
         factura.setCliente(cliente);
 
@@ -78,6 +85,26 @@ public class FacturaServicio {
         factura.setImporteCobrado(0.0);
         factura.setImporteSaldo(importeTotal);
 
+        try {
+            ArcaWsfeService.CaeResultado caeRes = arcaWsfeService.autorizarComprobante(
+                    fechaEmision.toLocalDate(),
+                    importeTotal
+            );
+            factura.setNumero(caeRes.numeroComprobante());
+            factura.setResultadoAfip(caeRes.resultado());
+            factura.setCae(caeRes.cae());
+            factura.setCaeFechaVencimiento(caeRes.caeFechaVencimiento());
+            factura.setMotivoRechazo(caeRes.motivoRechazo());
+            if (caeRes.cae() == null) {
+                LOG.warn("ARCA no devolvió CAE. Resultado={} Motivo={}", caeRes.resultado(), caeRes.motivoRechazo());
+            }
+        } catch (Exception ex) {
+            LOG.error("No se pudo obtener el CAE de ARCA para la factura del cliente {}", cliente.getId(), ex);
+            factura.setResultadoAfip("ERROR");
+            String motivo = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+            factura.setMotivoRechazo(motivo.length() > 250 ? motivo.substring(0, 250) : motivo);
+        }
+
         FacturaVenta facturaGuardada = facturaVentaRepositorio.save(factura);
 
         return new FacturaReporteDTO(
@@ -117,10 +144,6 @@ public class FacturaServicio {
         );
     }
 
-    /**
-     * Arma el comprobante completo de una factura (cabecera, cliente, ítems y totales).
-     * Es readOnly y transaccional para poder recorrer las relaciones LAZY sin errores.
-     */
     @Transactional(readOnly = true)
     public FacturaComprobanteDTO obtenerComprobante(Long id) {
         FacturaVenta f = facturaVentaRepositorio.findById(id)
@@ -164,8 +187,10 @@ public class FacturaServicio {
                 c != null ? c.getDomicilio() : null,
                 items,
                 neto,
-                f.getImporteTotal() - neto, // IVA = total guardado - neto (21% al crear)
-                f.getImporteTotal()
+                f.getImporteTotal() - neto,
+                f.getImporteTotal(),
+                f.getResultadoAfip(),
+                f.getMotivoRechazo()
         );
     }
 

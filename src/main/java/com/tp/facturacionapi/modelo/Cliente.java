@@ -22,5 +22,21 @@ public class Cliente extends EntityId {
 
     private String cuit;
 
+    // Responsable Inscripto, Monotributista, Consumidor Final, Exento...
+    private String condicionIva;
+
+    private String email;
+
+    private String telefono;
+
     private String domicilio;
+
+    private String localidad;
+
+    private String provincia;
+
+    private String codigoPostal;
+
+    @Column(length = 500)
+    private String observaciones;
 }
