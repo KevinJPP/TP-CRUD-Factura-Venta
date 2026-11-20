@@ -15,7 +15,13 @@ public class FacturaVentaDetalle {
     private Articulo articulo;
 
     private Double cantidad;
+    // Copia del precio al momento de facturar (no cambia aunque la lista se actualice)
     private Double precioUnitario;
+
+    // Precio de lista del que salió este renglón (trazabilidad)
+    @ManyToOne
+    @JoinColumn(name = "lista_precio_articulo_id")
+    private ListaPrecioArticulo listaPrecioArticulo;
 
     @ManyToOne
     @JoinColumn(name = "factura_venta_id")
@@ -54,6 +60,14 @@ public class FacturaVentaDetalle {
 
     public void setPrecioUnitario(Double precioUnitario) {
         this.precioUnitario = precioUnitario;
+    }
+
+    public ListaPrecioArticulo getListaPrecioArticulo() {
+        return listaPrecioArticulo;
+    }
+
+    public void setListaPrecioArticulo(ListaPrecioArticulo listaPrecioArticulo) {
+        this.listaPrecioArticulo = listaPrecioArticulo;
     }
 
     public FacturaVenta getFacturaVenta() {

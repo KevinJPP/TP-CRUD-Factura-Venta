@@ -28,6 +28,9 @@ public class FacturaServicio {
     private ArticuloRepositorio articuloRepositorio;
 
     @Autowired
+    private ListaPrecioArticuloRepositorio listaPrecioArticuloRepositorio;
+
+    @Autowired
     private ArcaWsfeService arcaWsfeService;
 
     @Transactional
@@ -63,12 +66,20 @@ public class FacturaServicio {
                 Articulo articulo = articuloRepositorio.findById(itemDto.getArticuloId())
                         .orElseThrow(() -> new RuntimeException("Artículo no encontrado con ID: " + itemDto.getArticuloId()));
 
+                // El precio lo define el backend desde la lista de precios; se ignora el que mande el cliente
+                ListaPrecioArticulo precioLista = listaPrecioArticuloRepositorio
+                        .findFirstByArticuloIdOrderByIdDesc(articulo.getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "El artículo " + articulo.getCodigo() + " no tiene precio de venta cargado"));
+                double precioUnitario = precioLista.getPrecioVenta();
+
                 FacturaVentaDetalle detalle = new FacturaVentaDetalle();
                 detalle.setArticulo(articulo);
                 detalle.setCantidad(itemDto.getCantidad());
-                detalle.setPrecioUnitario(itemDto.getPrecioUnitario());
+                detalle.setListaPrecioArticulo(precioLista);
+                detalle.setPrecioUnitario(precioUnitario);
 
-                double subtotalItem = itemDto.getCantidad() * itemDto.getPrecioUnitario();
+                double subtotalItem = itemDto.getCantidad() * precioUnitario;
                 subtotalNeto += subtotalItem;
                 double ivaItem = subtotalItem * 0.21;
                 totalIva += ivaItem;
